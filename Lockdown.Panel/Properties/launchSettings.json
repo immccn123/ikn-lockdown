@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Lockdown (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Lockdown (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
