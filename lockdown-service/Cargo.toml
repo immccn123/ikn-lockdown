@@ -10,7 +10,3 @@ windows-service = "0.7.0"
 [dependencies.windows]
 version = "0.58.0"
 features = ["Win32_UI_Shell", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security"]
-
-[profile.release]
-lto = true
-strip = true

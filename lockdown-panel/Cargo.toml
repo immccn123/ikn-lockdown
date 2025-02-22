@@ -7,7 +7,12 @@ build = "./build.rs"
 
 [dependencies]
 anyhow = { version = "1.0.95", features = ["backtrace"] }
-iced = "0.13"
+iced = { version = "0.13", default-features = false, features = [
+    "auto-detect-theme",
+    "wgpu",
+] }
+ico = "0.4.0"
+rfd = "0.15.2"
 thiserror = "2.0.11"
 
 [dependencies.windows]
@@ -16,12 +21,9 @@ features = [
     "Win32_System_Services",
     "Win32_Foundation",
     "Win32_UI_Shell",
-    "Win32_System_Com",
     "Win32_UI_WindowsAndMessaging",
 ]
 
 [build-dependencies]
+winapi = "0.3.9"
 winres = "0.1.12"
-
-[package.metadata.windows]
-manifest = "app.manifest"

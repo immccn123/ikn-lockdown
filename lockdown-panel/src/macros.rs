@@ -1,8 +1,13 @@
 #[macro_export]
 macro_rules! export {
-    ($($name:ident)*$(,)?) => {
+    ($(
+        $(#[$meta:meta])*
+        $name:ident $(,)?
+    )*) => {
         $(
             mod $name;
+
+            $(#[$meta])*
             pub use $name::*;
         )*
     };

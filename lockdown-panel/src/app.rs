@@ -1,33 +1,43 @@
 use iced::widget::{button, checkbox, column, row, scrollable, text};
-use iced::{Element, Padding, Task};
+use iced::{Color, Element, Length, Padding, Task};
 use std::collections::HashSet;
 use std::time::Duration;
 
 use crate::components::service_banner;
+use crate::error::UnwrapOrReport;
 use crate::service::{start_service_flow, ServiceStatus};
 use crate::utils::open_file_dialog;
 
 #[derive(Debug, Clone)]
 pub enum Message {
     ToggleFileSelection(usize),
-    AddFileRequest,
+    ShowFilebox,
     AddFiles(Vec<String>),
     RemoveSelectedFiles,
     RestartService,
     DeleteService,
-    ServiceStatusUpdated(ServiceStatus),
+    UpdateServiceStatus(ServiceStatus),
     PollServiceStatus,
+    Error(String),
+    ToAbout,
+
+    #[allow(unused)]
+    Nothing,
 }
 
 #[derive(Debug, Clone)]
 pub struct LockdownPanel {
     files: Vec<String>,
-    selected_files: HashSet<usize>, // Track selected files by index
+    /// 被选中的文件
+    selected_files: HashSet<usize>,
     service_status: ServiceStatus,
+    error_message: Vec<String>,
+    restart_required: bool,
 }
 
 impl LockdownPanel {
     pub fn view(&self) -> Element<Message> {
+        let mut elements: Vec<Element<'_, Message>> = Vec::new();
         let file_list = self
             .files
             .iter()
@@ -35,28 +45,59 @@ impl LockdownPanel {
             .fold(column![], |col, (index, file)| {
                 col.push(
                     row![checkbox(file, self.selected_files.contains(&index))
-                        .on_toggle(move |_| Message::ToggleFileSelection(index)),]
+                        .on_toggle(move |_| Message::ToggleFileSelection(index))]
                     .spacing(12),
                 )
             });
 
-        let banner = if self.service_status != ServiceStatus::Running {
-            service_banner(self.service_status)
-        } else {
-            column![].into()
+        if self.service_status != ServiceStatus::Running || self.restart_required {
+            elements.push(service_banner(self.service_status, self.restart_required));
+        };
+
+        if !self.error_message.is_empty() {
+            elements.push(
+                self.error_message
+                    .iter()
+                    .fold(column![], |col, message| {
+                        col.push(text(message).color(Color::from_rgb(1., 0., 0.)))
+                    })
+                    .into(),
+            )
+        };
+
+        let restart_button_text = match self.service_status {
+            ServiceStatus::Running | ServiceStatus::Error => "重启服务",
+            ServiceStatus::Starting => "启动中...",
+            ServiceStatus::Stopped => "启动服务",
         };
 
         let menu = row![
-            button(text("添加")).on_press(Message::AddFileRequest),
-            button(text("移除")).on_press(Message::RemoveSelectedFiles),
-            button(text("重启/注册服务")).on_press(Message::RestartService),
-            button(text("删除服务（还没做）")).on_press(Message::DeleteService),
+            button("添加").on_press(Message::ShowFilebox),
+            button("移除")
+                .style(button::secondary)
+                .on_press(Message::RemoveSelectedFiles),
+            button(restart_button_text)
+                .style(button::secondary)
+                .on_press_maybe(if self.service_status == ServiceStatus::Starting {
+                    None
+                } else {
+                    Some(Message::RestartService)
+                }),
+            button("删除服务")
+                .style(button::secondary)
+                .on_press(Message::DeleteService),
+            button("关于")
+                .style(button::secondary)
+                .on_press(Message::ToAbout),
         ]
         .spacing(12);
 
-        column![banner, menu, scrollable(file_list),]
+        column![text("Lockdown 面板").size(20)]
+            .extend(elements)
+            .push(menu)
+            .push(scrollable(file_list).width(Length::Fill))
             .spacing(12)
-            .padding(Padding::from([12, 20]))
+            .padding(Padding::from([6, 20]))
             .into()
     }
 
@@ -71,42 +112,52 @@ impl LockdownPanel {
 
                 Task::none()
             }
-            Message::AddFileRequest => {
-                Task::future(async {
-                    Message::AddFiles(open_file_dialog().unwrap())
-                })
+
+            Message::Error(message) => {
+                self.error_message.push(message);
+
+                Task::none()
             }
+
+            Message::ShowFilebox => Task::future(async {
+                Message::AddFiles(open_file_dialog().await.unwrap_or_report())
+            }),
+
             Message::RemoveSelectedFiles => {
                 let mut keep =
                     (0..self.files.len()).map(|index| !self.selected_files.contains(&index));
                 self.files.retain(|_| keep.next().unwrap());
                 self.selected_files.clear();
-                self.save_files();
-
-                Task::none()
+                if let Err(e) = crate::store::write_data_file(&self.files) {
+                    Task::future(async move { Message::Error(e.to_string()) })
+                } else {
+                    self.restart_required = true;
+                    Task::none()
+                }
             }
+
             Message::RestartService => {
                 self.service_status = ServiceStatus::Starting;
+                self.restart_required = false;
 
                 Task::future(async {
                     if let Err(e) = start_service_flow(true) {
-                        println!("Error starting service: {}", e);
-                        Message::ServiceStatusUpdated(ServiceStatus::Error)
+                        eprintln!("Error starting service: {}", e);
+                        Message::UpdateServiceStatus(ServiceStatus::Error)
                     } else {
-                        Message::ServiceStatusUpdated(ServiceStatus::Running)
+                        Message::UpdateServiceStatus(ServiceStatus::Running)
                     }
                 })
             }
-            Message::DeleteService => {
-                println!("Delete Service");
 
-                Task::none()
-            }
-            Message::ServiceStatusUpdated(status) => {
+            Message::DeleteService => Task::none(),
+
+            Message::UpdateServiceStatus(status) => {
                 self.service_status = status;
 
                 Task::none()
             }
+
             Message::PollServiceStatus => {
                 if self.service_status != ServiceStatus::Starting {
                     match crate::service::is_service_running() {
@@ -125,9 +176,11 @@ impl LockdownPanel {
 
                 Task::future(async {
                     std::thread::sleep(Duration::from_secs(1));
+
                     Message::PollServiceStatus
                 })
             }
+
             Message::AddFiles(mut new_files) => {
                 new_files.sort();
                 new_files.dedup();
@@ -136,16 +189,18 @@ impl LockdownPanel {
                         self.files.push(path);
                     }
                 }
-                self.save_files();
-
-                Task::none()
+                if let Err(e) = crate::store::write_data_file(&self.files) {
+                    Task::future(async move { Message::Error(e.to_string()) })
+                } else {
+                    self.restart_required = true;
+                    Task::none()
+                }
             }
-        }
-    }
 
-    fn save_files(&self) {
-        crate::store::write_data_file(&self.files).unwrap();
-        println!("Files saved: {:?}", self.files); // Placeholder for saving
+            Message::ToAbout => Task::none(),
+
+            Message::Nothing => Task::none(),
+        }
     }
 
     pub fn title(&self) -> String {
@@ -165,6 +220,8 @@ impl Default for LockdownPanel {
             files: crate::store::read_data_file().unwrap(),
             selected_files: HashSet::new(),
             service_status,
+            error_message: Vec::new(),
+            restart_required: false,
         }
     }
 }
