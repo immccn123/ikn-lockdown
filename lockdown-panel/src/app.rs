@@ -2,6 +2,9 @@ use iced::widget::{button, checkbox, column, row, scrollable, text};
 use iced::{Color, Element, Length, Padding, Task};
 use std::collections::HashSet;
 use std::time::Duration;
+use windows::core::HSTRING;
+use windows::Win32::UI::Shell::ShellExecuteW;
+use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
 use crate::components::service_banner;
 use crate::error::UnwrapOrReport;
@@ -15,11 +18,10 @@ pub enum Message {
     AddFiles(Vec<String>),
     RemoveSelectedFiles,
     RestartService,
-    DeleteService,
     UpdateServiceStatus(ServiceStatus),
     PollServiceStatus,
     Error(String),
-    ToAbout,
+    About,
 
     #[allow(unused)]
     Nothing,
@@ -83,12 +85,9 @@ impl LockdownPanel {
                 } else {
                     Some(Message::RestartService)
                 }),
-            button("删除服务")
-                .style(button::secondary)
-                .on_press(Message::DeleteService),
             button("关于")
                 .style(button::secondary)
-                .on_press(Message::ToAbout),
+                .on_press(Message::About),
         ]
         .spacing(12);
 
@@ -150,8 +149,6 @@ impl LockdownPanel {
                 })
             }
 
-            Message::DeleteService => Task::none(),
-
             Message::UpdateServiceStatus(status) => {
                 self.service_status = status;
 
@@ -197,7 +194,20 @@ impl LockdownPanel {
                 }
             }
 
-            Message::ToAbout => Task::none(),
+            Message::About => Task::future(async {
+                unsafe {
+                    ShellExecuteW(
+                        None,
+                        &HSTRING::from("open"),
+                        &HSTRING::from("https://lockdown.imken.dev/about.html"),
+                        None,
+                        None,
+                        SW_SHOWNORMAL,
+                    );
+
+                    Message::Nothing
+                }
+            }),
 
             Message::Nothing => Task::none(),
         }

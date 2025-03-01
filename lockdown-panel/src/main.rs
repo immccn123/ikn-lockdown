@@ -58,8 +58,7 @@ fn main() -> iced::Result {
         app::LockdownPanel::view,
     )
     .centered()
-    .font(include_bytes!("../assets/fonts/NotoSansSC-Regular.ttf").as_slice())
-    .default_font(Font::with_name("Noto Sans SC"))
+    .default_font(Font::with_name("微软雅黑"))
     .window(window_settings)
     .run_with(|| {
         (

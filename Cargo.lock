@@ -1840,7 +1840,7 @@ dependencies = [
 
 [[package]]
 name = "lockdown-panel"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "iced",
@@ -1854,7 +1854,7 @@ dependencies = [
 
 [[package]]
 name = "lockdown-service"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "windows 0.58.0",

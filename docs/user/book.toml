@@ -1,0 +1,9 @@
+[book]
+authors = ["Imken Luo"]
+language = "zh"
+multilingual = false
+src = "src"
+title = "Lockdown 文档"
+
+[output.html]
+git-repository-url = "https://github.com/immccn123/ikn-lockdown"
